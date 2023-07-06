@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Sandstorm Raw API sample app</title>
+    <meta charset="utf-8">
+    <script type="text/javascript">
+let rpcCounter = 0;
+const rpcs = {};
+
+window.addEventListener("message", function (event) {
+  if (event.source !== window.parent || typeof event.data !== "object" || typeof event.data.rpcId !== "number") {
+    console.warn("got unexpected postMessage:", event);
+    return;
+  }
+
+  const handler = rpcs[event.data.rpcId];
+  if (!handler) {
+    console.error("no such rpc ID for event", event);
+    return;
+  }
+
+  delete rpcs[event.data.rpcId];
+  handler(event.data);
+});
+
+function sendRpc(name, message) {
+  const id = rpcCounter++; // eslint-disable-line no-plusplus
+  const rpc = {
+    rpcId: id,
+  };
+  Object.assign(rpc, message);
+  const obj = {
+    [name]: rpc,
+  };
+  window.parent.postMessage(obj, "*");
+  return new Promise(function (resolve, reject) {
+    rpcs[id] = function (response) {
+      if (response.error) {
+        reject(new Error(response.error));
+      } else {
+        resolve(response);
+      }
+    };
+  });
+}
+
+function fetch(url, options) {
+  // Somewhat pleasant wrapper around XHR.
+
+  options = options || {};
+  return new Promise(function(resolve, reject) {
+    var xhr = new XMLHttpRequest();
+    xhr.onload = function () {
+      if (xhr.status >= 400) {
+        reject(new Error("XHR returned status " + xhr.status + ":\n" + xhr.responseText));
+      } else {
+        resolve(xhr);
+      }
+    };
+    xhr.onerror = function(e) { reject(e); };
+    if (options.hasOwnProperty('responseType'))
+      xhr.responseType = options.responseType;
+    var method = 'get';
+    if (options.hasOwnProperty('method'))
+      method = options.method;
+    xhr.open(method, url)
+    var data = undefined;
+    if (options.hasOwnProperty('data'))
+      data = options.data;
+    if (options.hasOwnProperty('headers')) {
+      for(const [k, v] of Object.entries(options.headers)) {
+        xhr.setRequestHeader(k, v)
+      }
+    }
+    xhr.send(data);
+  });
+}
+function doGet(url) {
+  return fetch(url);
+}
+function doPost(url, data) {
+  return fetch(url, { method: "post", data: data });
+}
+function doPut(url, data) {
+  return fetch(url, { method: "put", data: data });
+}
+function doDelete(url) {
+  return fetch(url, { method: "delete" });
+}
+
+function postScheduledJob(options) {
+  const headers = {
+      "x-sandstorm-app-test-schedule-should-cancel": options.shouldCancel.toString(),
+      "x-sandstorm-app-test-schedule-refstr": options.refStr,
+    }
+  if(options.period) {
+    headers["x-sandstorm-app-test-schedule-oneshot"] = "false";
+    headers["x-sandstorm-app-test-schedule-period"] = options.period;
+  } else {
+    headers["x-sandstorm-app-test-schedule-oneshot"] = "true";
+    headers["x-sandstorm-app-test-schedule-period"] = "";
+  }
+  return fetch("/schedule", {
+    "method": "post",
+    data: '',
+    headers: headers,
+  }).then(function(response) {
+    const status = response.status
+    addText(
+      "sched-response",
+      "Success: " + (status >= 200 && status < 300).toString(),
+    )
+  }).catch(function(e) {
+    addText("sched-error", e.toString())
+  });
+}
+
+function addText(id, text) {
+  var elem = document.createElement("pre");
+  elem.id = id;
+  elem.textContent = text;
+  document.body.appendChild(elem);
+}
+
+function doPowerboxRequest(desc) {
+  sendRpc("powerboxRequest", {
+    query: desc instanceof Array ? desc : [desc],
+    saveLabel: {defaultText: "E-mail Verifier"},
+  }).then(function (response) {
+    addText("pb-response", JSON.stringify(response));
+    return doPost("/accept", response.token).then(function (xhr) {
+      addText("result-text", xhr.responseText);
+    });
+  }).catch(function (e) {
+    addText("pb-error", e.toString());
+    console.error(e);
+  });
+}
+    </script>
+  </head>
+  <body>
+    <h1>Test App</h1>
+
+    <!-- See testDesc in test-app.capnp. -->
+    <p><button onclick="doPowerboxRequest('EAlQAQEAABEBF1EEAQH_y9-dR8kYld8AUAEBAXsRASIHZm9v')" id="do-powerbox-request">Powerbox Request</button></p>
+
+    <!-- See testDescNoMatch in test-app.capnp. -->
+    <p><button onclick="doPowerboxRequest('EAlQAQEAABEBF1EEAQH_y9-dR8kYld8AUAEBAXsRASIHYmFy')" id="do-powerbox-request-no-match">Powerbox Request -- no match</button></p>
+
+    <!-- See testDescWildcard in test-app.capnp. -->
+    <p><button onclick="doPowerboxRequest('EAhQAQEAABEBF1EEAQH_y9-dR8kYld8AUAEBAXsAAA')" id="do-powerbox-request-wildcard">Powerbox Request -- wildcard</button></p>
+
+    <!-- First descriptor in the list is testDesc. Second is a query for a UiView. -->
+    <p><button onclick="doPowerboxRequest(['EAlQAQEAABEBF1EEAQH_y9-dR8kYld8AUAEBAXsRASIHZm9v', 'EAZQAQEAABEBF1EEAQH_5-Jn6pjXtNsAAAA'])" id="do-powerbox-request-multi-descriptor">Powerbox Request -- multiple descriptors</button></p>
+
+    <p><button onclick="postScheduledJob({period: 'hourly', shouldCancel: false, refStr: 'hourly'})" id="do-schedule-hourly">
+      Schedule hourly job.</button></p>
+
+    <p><button onclick="postScheduledJob({period: 'hourly', shouldCancel: true, refStr: 'hourly-cancel'})" id="do-schedule-hourly-cancel">
+      Schedule hourly job (cancel after first run).</button></p>
+
+    <p><button onclick="postScheduledJob({shouldCancel: false, refStr: 'oneshot'})" id="do-schedule-oneshot">
+      Schedule a one-shot job.</button></p>
+
+    <p><button onclick="doPost('/test-system-api', '')" id="do-test-system-api">Test the system api.</button></p>
+
+    <p><button id="shutdown">Shut down server</button></p>
+
+    <div id="publicId"></div>
+
+    <script>
+      document.getElementById("shutdown").addEventListener("click", function() {
+        window.location = "/shutdown";
+      });
+      doGet("/publicId").then(function(xhr) {
+        const elt = document.createElement("p");
+        elt.setAttribute("id", "public-address");
+        elt.innerHTML = xhr.responseText;
+        document.getElementById("publicId").appendChild(elt);
+      });
+    </script>
+  </body>
+</html>
