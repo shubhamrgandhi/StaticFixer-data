@@ -115,7 +115,7 @@ exports.redirect = functions.https.onRequest((request, response) => {
 </table>
 
 
-## Directory Structure
+### Directory Structure
 Below is the directory structure for the `PairedPrograms` data. Here, `ext` refers to the extension of the individual program files and is one of `js`, `ts`, `tsx`, `ejs`, `htm`, or `html`.
 <pre>
   PairedPrograms
