@@ -140,3 +140,15 @@ Below is the directory structure for the `PairedPrograms` data. Here, `ext` refe
       .
       .
 </pre>
+
+# Citation Information
+<pre>
+	@misc{jain2023staticfixer,
+      title={StaticFixer: From Static Analysis to Static Repair}, 
+      author={Naman Jain and Shubham Gandhi and Atharv Sonwane and Aditya Kanade and Nagarajan Natarajan and Suresh Parthasarathy and Sriram Rajamani and Rahul Sharma},
+      year={2023},
+      eprint={2307.12465},
+      archivePrefix={arXiv},
+      primaryClass={cs.SE}
+}
+</pre>
